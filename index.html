@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tezpur Ambulance Route Optimizer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111c2e;
+      --panel2: #17243a;
+      --text: #e8eef8;
+      --muted: #9aabc2;
+      --accent: #42b6a5;
+      --red: #ff5d68;
+      --line: #2a3a52;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: .2px;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: calc(100vh - 76px);
+    }
+
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      overflow: auto;
+    }
+
+    #map {
+      height: calc(100vh - 76px);
+      min-height: 560px;
+      background: #dce5e8;
+    }
+
+    .card {
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 13px;
+      margin-bottom: 13px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+    }
+
+    .value {
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 5px;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    button,
+    select {
+      width: 100%;
+      border: 1px solid #40536f;
+      border-radius: 8px;
+      background: #20314b;
+      color: var(--text);
+      padding: 10px;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #2a4162;
+    }
+
+    button:disabled,
+    select:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    button.primary {
+      background: #087f73;
+      border-color: #119d8e;
+    }
+
+    #trafficCard label {
+      display: block;
+      margin-top: 9px;
+    }
+
+    #congestionInfo {
+      margin-top: 9px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #102033;
+      line-height: 1.5;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .comparison>div {
+      padding: 8px;
+      border-radius: 8px;
+      background: #102033;
+    }
+
+    .comparison strong {
+      display: block;
+      font-size: 16px;
+      margin-top: 3px;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .swatch {
+      display: inline-block;
+      width: 20px;
+      height: 4px;
+      margin-right: 7px;
+      vertical-align: middle;
+      border-radius: 5px;
+    }
+
+    .status {
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: #102e2b;
+      color: #8de0d2;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .leaflet-popup-content {
+      color: #142033;
+      line-height: 1.45;
+    }
+
+    .marker-emoji {
+      font-size: 24px;
+      line-height: 30px;
+      text-align: center;
+    }
+
+    .north-note {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #102033;
+      color: #b9c9dd;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    @media (max-width:850px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        order: 2;
+      }
+
+      #map {
+        height: 65vh;
+        min-height: 430px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div>
+      <h1>🚑 Tezpur Ambulance Route Optimizer</h1>
+      <div class="sub">OpenStreetMap road network · Kanaklata Civil Hospital · Dijkstra shortest-path model</div>
+    </div>
+    <div class="small">Academic simulation — not a live emergency dispatch service</div>
+  </header>
+  <div class="layout">
+    <aside>
+      <div class="card">
+        <div class="label">Network overview</div>
+        <div class="value" id="nodeCount">—</div>
+        <div class="small">road-network nodes</div>
+        <div class="value" id="edgeCount">—</div>
+        <div class="small">directed road connections</div>
+      </div>
+      <div class="card">
+        <div class="label">Route estimate</div>
+        <div class="value" id="timeValue">—</div>
+        <div class="small">estimated travel time (minutes)</div>
+        <p class="small" id="routeInfo">Load the exported graph to view a route.</p>
+      </div>
+      <div class="card" id="trafficCard">
+        <div class="label">Traffic congestion simulation</div>
+        <p class="small">Select a road used by the current route, increase its travel-time weight, then run Dijkstra
+          again to check whether an alternative route is faster.</p>
+        <label class="small" for="congestedRoadSelect">Road on current route</label>
+        <select id="congestedRoadSelect" disabled>
+          <option value="">Calculate a route first</option>
+        </select>
+        <label class="small" for="congestionMultiplier">Congestion level</label>
+        <select id="congestionMultiplier">
+          <option value="2">Moderate traffic — 2× weight</option>
+          <option value="3" selected>Heavy traffic — 3× weight</option>
+          <option value="5">Severe traffic — 5× weight</option>
+          <option value="10">Extreme traffic — 10× weight</option>
+        </select>
+        <button class="primary" id="congestionBtn" disabled>Increase edge weight &amp; recalculate</button>
+        <button id="clearCongestionBtn" disabled>Clear congestion / restore normal route</button>
+        <div class="small" id="congestionInfo">Calculate a normal route to enable the congestion simulation.</div>
+      </div>
+      <div class="card">
+        <div class="label">Choose ambulance starting direction</div>
+        <select id="startSelect">
+          <option value="">Choose a direction</option>
+        </select>
+        <button class="primary" id="routeBtn">Calculate shortest route</button>
+        <button id="animateBtn">▶ Animate ambulance</button>
+        <button id="resetBtn">Reset map view</button>
+        <div class="north-note">The map is north-up: North is at the top, East on the right, South at the bottom and
+          West on the left. Select any of the eight approaches to demonstrate different ambulance entry directions.
+        </div>
+      </div>
+      <div class="card">
+        <div class="label">Select destination hospital</div>
+        <select id="hospitalSelect">
+          <option value="">Loading hospitals...</option>
+        </select>
+        <p class="small">Route ends at the selected hospital through its nearest reachable road-network access node.</p>
+      </div>
+      <div class="card">
+        <div class="label">Map legend</div>
+        <div class="legend">
+          <div><span class="swatch" style="background:#8996a8"></span>Road network</div>
+          <div><span class="swatch" style="background:#ef4352"></span>Shortest route</div>
+          <div>🟢 Starting point</div>
+          <div>🏥 Hospital</div>
+          <div>🚑 Ambulance</div>
+          <div>🔵 Demo start</div>
+        </div>
+      </div>
+      <div class="status" id="status">Waiting for output/road_network.json. Run main.py first, then open this page
+        through a local web server.</div>
+      <p class="small">Starting locations are curated road-graph nodes labelled with nearby mapped landmarks. The route
+        ends at the hospital's nearest road-network access node.</p>
+      <p class="small">Travel times use assumed road speeds; this project does not use live traffic or verified
+        ambulance ETAs. Map data © OpenStreetMap contributors.</p>
+    </aside>
+    <main>
+      <div id="map"></div>
+    </main>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script>
+    const map = L.map('map').setView([26.628821, 92.796941], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 20, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let data = null, roadLayers = [], routeLayer = null, baselineLayer = null, hospitalMarker = null, selectedHospital = null;
+    let ambulanceMarker = null, startMarker = null, animationTimer = null, currentLocation = null;
+    let currentResult = null, baselineResult = null, activeCongestion = null, currentDestination = null, currentAccessCandidate = null;
+    const nodeById = new Map(), demoMarkers = [];
+    const statusEl = document.getElementById('status');
+    const roadSelect = document.getElementById('congestedRoadSelect');
+    const congestionButton = document.getElementById('congestionBtn');
+    const clearCongestionButton = document.getElementById('clearCongestionBtn');
+    const congestionInfo = document.getElementById('congestionInfo');
+
+    function emojiIcon(emoji) {
+      return L.divIcon({ className: '', html: `<div class="marker-emoji">${emoji}</div>`, iconSize: [30, 34], iconAnchor: [15, 17] });
+    }
+    function clearAnimationAndMarkers() {
+      if (animationTimer) clearInterval(animationTimer);
+      animationTimer = null;
+      if (startMarker) map.removeLayer(startMarker);
+      if (ambulanceMarker) map.removeLayer(ambulanceMarker);
+      startMarker = ambulanceMarker = null;
+    }
+    function clearRouteLayers() {
+      if (routeLayer) map.removeLayer(routeLayer);
+      if (baselineLayer) map.removeLayer(baselineLayer);
+      routeLayer = baselineLayer = null;
+      clearAnimationAndMarkers();
+    }
+    function getEffectiveWeight(edge, congestion) {
+      const base = Number(edge.travel_time_min);
+      return congestion && String(edge.osm_way_id) === String(congestion.wayId)
+        ? base * congestion.multiplier : base;
+    }
+    function dijkstra(start, destination, congestion = null) {
+      const dist = new Map(), prev = new Map(), visited = new Set(), adjacency = new Map();
+      for (const n of data.nodes) dist.set(String(n.id), Infinity);
+      dist.set(String(start), 0);
+      for (const e of data.edges) {
+        const a = String(e.source), b = String(e.target), w = getEffectiveWeight(e, congestion);
+        if (!adjacency.has(a)) adjacency.set(a, []);
+        adjacency.get(a).push({ to: b, weight: w, edge: e });
+      }
+      while (true) {
+        let u = null, best = Infinity;
+        for (const [id, d] of dist) if (!visited.has(id) && d < best) { best = d; u = id; }
+        if (u === null || u === String(destination)) break;
+        visited.add(u);
+        for (const item of (adjacency.get(u) || [])) {
+          const alt = best + item.weight;
+          if (alt < (dist.get(item.to) ?? Infinity)) {
+            dist.set(item.to, alt);
+            prev.set(item.to, { node: u, edge: item.edge });
+          }
+        }
+      }
+      const end = String(destination);
+      if (!Number.isFinite(dist.get(end))) return null;
+      const path = [end], pathEdges = [];
+      let current = end;
+      while (current !== String(start)) {
+        const step = prev.get(current);
+        if (!step) return null;
+        pathEdges.push(step.edge);
+        current = step.node;
+        path.push(current);
+      }
+      path.reverse();
+      pathEdges.reverse();
+      return { path, pathEdges, time: dist.get(end) };
+    }
+    function getRouteRoads(result) {
+      const byWay = new Map();
+      for (const edge of result.pathEdges) {
+        const wayId = String(edge.osm_way_id || '');
+        if (!wayId) continue;
+        if (!byWay.has(wayId)) {
+          const name = (edge.road_name || 'Unnamed road').trim();
+          const type = (edge.road_type || 'road').trim();
+          byWay.set(wayId, { wayId, name, type, segments: 0 });
+        }
+        byWay.get(wayId).segments++;
+      }
+      return [...byWay.values()];
+    }
+    function populateCongestionRoads(result) {
+      const roads = getRouteRoads(result);
+      roadSelect.replaceChildren(new Option('Choose a road on this route', ''));
+      roads.forEach(road => {
+        const suffix = road.name.toLowerCase() === 'unnamed road' ? `Unnamed ${road.type} road` : road.name;
+        roadSelect.add(new Option(`${suffix} · ${road.segments} route segment(s)`, road.wayId));
+      });
+      roadSelect.disabled = roads.length === 0;
+      congestionButton.disabled = roads.length === 0;
+      clearCongestionButton.disabled = !activeCongestion;
+      if (!roads.length) congestionInfo.textContent = 'No OSM road identifiers were found on this route. Re-run main.py to export osm_way_id for every edge.';
+      else if (activeCongestion) {
+        roadSelect.value = activeCongestion.wayId;
+        congestionInfo.textContent = `Congestion active: ${activeCongestion.roadName}, ${activeCongestion.multiplier}× travel-time weight.`;
+      } else {
+        congestionInfo.textContent = `${roads.length} physical road(s) on the current route are available for congestion simulation.`;
+      }
+    }
+    function routeDistance(result) {
+      return result.pathEdges.reduce((sum, e) => sum + Number(e.distance_m || 0), 0);
+    }
+    function drawResult(result, location, { showBaseline = false } = {}) {
+      clearRouteLayers();
+      const coords = result.path.map(id => nodeById.get(String(id))).filter(Boolean).map(n => [n.lat, n.lon]);
+      if (!coords.length) { statusEl.textContent = 'Route nodes were not found in the exported graph.'; return; }
+      if (showBaseline && baselineResult) {
+        const oldCoords = baselineResult.path.map(id => nodeById.get(String(id))).filter(Boolean).map(n => [n.lat, n.lon]);
+        baselineLayer = L.polyline(oldCoords, { color: '#48a5ff', weight: 5, opacity: .8, dashArray: '8 8' }).addTo(map);
+      }
+      routeLayer = L.polyline(coords, { color: '#ef4352', weight: 6, opacity: .97 }).addTo(map);
+      startMarker = L.marker(coords[0]).addTo(map).bindPopup(`<b>Ambulance start</b><br>${location.label}`);
+      ambulanceMarker = L.marker(coords[0], { icon: emojiIcon('🚑'), zIndexOffset: 1000 }).addTo(map);
+      const layers = [routeLayer]; if (baselineLayer) layers.push(baselineLayer);
+      map.fitBounds(L.featureGroup(layers).getBounds(), { padding: [35, 35] });
+      document.getElementById('timeValue').textContent = Number(result.time).toFixed(2);
+      document.getElementById('routeInfo').textContent = `${location.direction} approach · ${(routeDistance(result) / 1000).toFixed(2)} km road distance · ${result.path.length - 1} road segments`;
+      populateCongestionRoads(baselineResult || result);
+    }
+    function getSelectedHospitalRoute(startId) {
+      if (!selectedHospital) return null;
+      let best = null;
+      for (const candidate of (selectedHospital.access_candidates || [])) {
+        const result = dijkstra(startId, candidate.node_id, activeCongestion);
+        if (result && (!best || result.time < best.result.time)) best = { candidate, result };
+      }
+      return best;
+    }
+    function refreshHospitalMarker() {
+      if (hospitalMarker) map.removeLayer(hospitalMarker);
+      if (selectedHospital) hospitalMarker = L.marker([selectedHospital.lat, selectedHospital.lon], { icon: emojiIcon('🏥'), zIndexOffset: 900 })
+        .addTo(map).bindPopup(`<b>${selectedHospital.name}</b><br>${selectedHospital.address || 'Hospital destination'}`);
+    }
+    function calculateSelectedRoute() {
+      if (!data) { statusEl.textContent = 'Wait for the graph data to load.'; return; }
+      const id = document.getElementById('startSelect').value;
+      if (!id) { statusEl.textContent = 'Choose one of the eight starting directions first.'; return; }
+      const location = (data.suggested_start_nodes || []).find(x => String(x.id) === String(id));
+      if (!location) { statusEl.textContent = 'The selected demonstration location is missing from the graph export.'; return; }
+      if (!selectedHospital) { statusEl.textContent = 'Select a destination hospital first.'; return; }
+      activeCongestion = null;
+      const chosen = getSelectedHospitalRoute(id);
+      if (!chosen) { statusEl.textContent = `No directed route from ${location.label} to ${selectedHospital.name}. Try another start or destination.`; return; }
+      const result = chosen.result;
+      if (!result) { statusEl.textContent = 'No directed route exists from this start node to the hospital access node.'; return; }
+      currentLocation = location;
+      currentDestination = selectedHospital;
+      currentAccessCandidate = chosen.candidate;
+      baselineResult = result;
+      currentResult = result;
+      activeCongestion = null;
+      drawResult(result, location);
+      clearCongestionButton.disabled = true;
+      statusEl.textContent = `Shortest route: ${location.label} → ${selectedHospital.name}. Hospital is ${chosen.candidate.access_distance_m.toFixed(0)} m from the selected road-access node.`;
+    }
+    function applyCongestion() {
+      if (!currentLocation || !baselineResult) {
+        statusEl.textContent = 'Calculate a normal route before applying congestion.';
+        return;
+      }
+      const wayId = roadSelect.value;
+      if (!wayId) { statusEl.textContent = 'Select a road from the current route first.'; return; }
+      const multiplier = Number(document.getElementById('congestionMultiplier').value);
+      const road = getRouteRoads(baselineResult).find(r => r.wayId === wayId);
+      if (!road) { statusEl.textContent = 'That road is not part of the original route. Calculate the normal route again.'; return; }
+      const congestion = { wayId, multiplier, roadName: road.name };
+      const result = dijkstra(currentLocation.id, currentAccessCandidate.node_id, congestion);
+      if (!result) { statusEl.textContent = 'No route remains after applying this congestion scenario.'; return; }
+      activeCongestion = congestion;
+      currentResult = result;
+      drawResult(result, currentLocation, { showBaseline: true });
+      const changed = result.path.join('|') !== baselineResult.path.join('|');
+      const delta = result.time - baselineResult.time;
+      congestionInfo.innerHTML = `Congestion on <b>${road.name}</b>: ${multiplier}× edge weight.<div class="comparison"><div><span class="small">Normal route</span><strong>${baselineResult.time.toFixed(2)} min</strong></div><div><span class="small">After congestion</span><strong>${result.time.toFixed(2)} min</strong></div></div>`;
+      statusEl.textContent = changed
+        ? `Alternative route found by Dijkstra. Blue dashed = normal route; red = new route. Estimated time change: ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} min.`
+        : `Dijkstra recalculated the route, but this congestion level did not make another route cheaper. Try a higher multiplier or another road.`;
+      clearCongestionButton.disabled = false;
+      roadSelect.value = wayId;
+    }
+    function clearCongestion() {
+      if (!currentLocation || !baselineResult) return;
+      activeCongestion = null;
+      currentResult = baselineResult;
+      drawResult(baselineResult, currentLocation);
+      clearCongestionButton.disabled = true;
+      statusEl.textContent = 'Congestion cleared. The original shortest route and base edge weights have been restored.';
+    }
+    function animateAmbulance() {
+      if (!routeLayer) { statusEl.textContent = 'Calculate a route before starting the ambulance animation.'; return; }
+      if (animationTimer) clearInterval(animationTimer);
+      const points = routeLayer.getLatLngs(); let i = 0;
+      if (ambulanceMarker) map.removeLayer(ambulanceMarker);
+      ambulanceMarker = L.marker(points[0], { icon: emojiIcon('🚑'), zIndexOffset: 1000 }).addTo(map);
+      animationTimer = setInterval(() => {
+        i++;
+        if (i >= points.length) { clearInterval(animationTimer); animationTimer = null; statusEl.textContent = `Ambulance reached the road-access point for ${currentDestination ? currentDestination.name : 'the selected hospital'}.`; return; }
+        ambulanceMarker.setLatLng(points[i]);
+      }, 500);
+    }
+    async function loadData() {
+      try {
+        const response = await fetch('./output/road_network.json');
+        if (!response.ok) throw new Error('output/road_network.json not found. Run main.py first.');
+        data = await response.json();
+        for (const n of data.nodes) nodeById.set(String(n.id), n);
+        document.getElementById('nodeCount').textContent = data.nodes.length;
+        document.getElementById('edgeCount').textContent = data.edges.length;
+        for (const e of data.edges) {
+          const a = nodeById.get(String(e.source)), b = nodeById.get(String(e.target));
+          if (!a || !b) continue;
+          const line = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#8996a8', weight: 2, opacity: .65 }).addTo(map);
+          roadLayers.push(line);
+        }
+        const h = data.hospital;
+        const hospitalSelect = document.getElementById('hospitalSelect');
+        hospitalSelect.replaceChildren();
+        for (const hospital of (data.hospitals || [])) hospitalSelect.add(new Option(hospital.name, String(hospital.id)));
+        if (data.hospitals && data.hospitals.length) {
+          selectedHospital = data.hospitals.find(x => x.name.toLowerCase() === 'kanaklata civil hospital') || data.hospitals[0];
+          hospitalSelect.value = String(selectedHospital.id);
+          refreshHospitalMarker();
+        } else {
+          hospitalSelect.add(new Option('No hospital destinations available', ''));
+          statusEl.textContent = 'Hospital catalogue missing. Run updated main.py to regenerate road_network.json.';
+        }
+        const select = document.getElementById('startSelect');
+        const locations = data.suggested_start_nodes || [];
+        const groups = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West'];
+        for (const direction of groups) {
+          const groupLocations = locations.filter(x => x.direction === direction);
+          if (!groupLocations.length) continue;
+          const optgroup = document.createElement('optgroup'); optgroup.label = direction;
+          for (const location of groupLocations) {
+            const option = document.createElement('option'); option.value = String(location.id); option.textContent = location.label; optgroup.appendChild(option);
+            const marker = L.circleMarker([location.lat, location.lon], { radius: 7, color: '#123b70', weight: 2, fillColor: '#54a8ff', fillOpacity: .95 }).addTo(map);
+            marker.bindPopup(`<b>${location.direction}</b><br>${location.label}<br>Approx. ${Math.round(location.distance_from_hospital_m)} m from hospital (straight line)`);
+            demoMarkers.push(marker);
+          }
+          select.appendChild(optgroup);
+        }
+        if (data.default_start_node) select.value = String(data.default_start_node);
+        if (data.default_start_node) calculateSelectedRoute();
+        else statusEl.textContent = 'Graph loaded. Choose one of the eight compass directions.';
+        if (selectedHospital) map.setView([selectedHospital.lat, selectedHospital.lon], 15);
+      } catch (error) {
+        statusEl.textContent = 'Could not load project graph data: ' + error.message + ' Serve the project folder locally (for example, python3 -m http.server 8000).';
+      }
+    }
+    document.getElementById('routeBtn').addEventListener('click', calculateSelectedRoute);
+    document.getElementById('animateBtn').addEventListener('click', animateAmbulance);
+    document.getElementById('resetBtn').addEventListener('click', () => { if (selectedHospital) map.setView([selectedHospital.lat, selectedHospital.lon], 15); });
+    document.getElementById('startSelect').addEventListener('change', () => { if (data) calculateSelectedRoute(); });
+    document.getElementById('hospitalSelect').addEventListener('change', () => {
+      if (!data) return;
+      const id = document.getElementById('hospitalSelect').value;
+      selectedHospital = (data.hospitals || []).find(h => String(h.id) === String(id)) || null;
+      activeCongestion = null;
+      refreshHospitalMarker();
+      if (selectedHospital) calculateSelectedRoute();
+    });
+    congestionButton.addEventListener('click', applyCongestion);
+    clearCongestionButton.addEventListener('click', clearCongestion);
+    loadData();
+  </script>
+</body>
+
+</html>
